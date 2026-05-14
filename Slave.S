@@ -181,10 +181,37 @@ div_next:
 div_done:
     ; r25:r24 = frekuensi dalam Hz (16-bit)
 
-    ; --- Transmisi USART: Kirim 2 byte biner (protokol ke Master) ---
-    ; Byte 1: High Byte (r25)
-    KIRIM_BYTE r25
-    ; Byte 2: Low Byte (r24)
-    KIRIM_BYTE r24
+    ; --- 1. Pencegahan Konflik Data ---
+    ; Sync Byte = 0xFF, jadi data aktual tidak boleh bernilai 0xFF
+    cpi r25, 0xFF
+    brne cek_low_byte
+    ldi r25, 0xFE           ; Paksa turun ke 0xFE
+
+cek_low_byte:
+    cpi r24, 0xFF
+    brne transmisi_mulai
+    ldi r24, 0xFE           ; Paksa turun ke 0xFE
+
+transmisi_mulai:
+    ; --- 2. Transmisi USART (Protokol: Sync -> Low -> High) ---
+    ldi r16, 0xFF
+    KIRIM_BYTE r16          ; Sync Byte (penanda awal paket)
+    KIRIM_BYTE r24          ; Low Byte (Little-Endian)
+    KIRIM_BYTE r25          ; High Byte
+
+    ; --- 3. Rate Limiting (Delay ~150ms @ 16 MHz) ---
+    ; Mencegah Slave membanjiri USART, beri Master waktu proses LCD
+    ldi r18, 13
+delay_outer:
+    ldi r19, 250
+delay_inner:
+    ldi r20, 250
+delay_core:
+    dec r20
+    brne delay_core
+    dec r19
+    brne delay_inner
+    dec r18
+    brne delay_outer
 
     rjmp main_loop
