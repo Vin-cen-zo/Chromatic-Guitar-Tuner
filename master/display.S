@@ -49,25 +49,21 @@
 #define __SFR_OFFSET 0x00
 #include "avr/io.h"
 
-; String literal pendek untuk label di baris 0
+; String literal pendek untuk label di baris 0 & 1
 ; Disimpan di Flash, diakses dengan LPM
-_str_t_colon:   .ascii "T:"
+_str_hz_space:  .ascii "Hz "
                 .byte 0
-_str_a_colon:   .ascii "A:"
-                .byte 0
-_str_hz:        .ascii " Hz"
-                .byte 0
-_str_spaces:    .ascii "   "
+_str_hz_clear:  .ascii "Hz       "
                 .byte 0
 
 ; =============================================================================
 ; UPDATE_DISPLAY
 ; Deskripsi : Update seluruh tampilan LCD berdasarkan input dari Peran 3.
-;             Tidak menggunakan LCD_CLEAR — overwrite langsung untuk
-;             menghindari flicker (refresh ~6-7x/detik dari Peran 1).
+;             Baris 0: "{Target_Name} {Target_Hz}Hz {Status}" (mis. "E2 082Hz loosen ")
+;             Baris 1: "{Current_Name} {Current_Hz}Hz      " (mis. "E#2 083Hz      ")
 ;
 ; Input     : R25:R24 = Hz aktual (dari Peran 3, sudah di R25:R24)
-;             R23     = index senar target (0–5)
+;             R23     = index senar target (0-5)
 ; Output    : Tidak ada
 ; Modifikasi: Semua register di-PUSH/POP — aman
 ; =============================================================================
@@ -79,101 +75,113 @@ UPDATE_DISPLAY:
     PUSH R25
     PUSH ZH
     PUSH ZL
+    PUSH R20
+    PUSH R21
 
     ; =========================================================
-    ; BARIS 0: "T:A2   A:110 Hz "
+    ; BARIS 0: "{T_NAME} {T_HZ}Hz {STATUS}"
     ; =========================================================
 
-    ; --- Posisi kolom 0: print "T:" ---
-    LDI  R16, 0                ; baris 0
-    LDI  R17, 0                ; kolom 0
-    RCALL LCD_GOTOXY
-
-    LDI  ZH, hi8(_str_t_colon)
-    LDI  ZL, lo8(_str_t_colon)
-    RCALL LCD_STRING            ; print "T:"
-
-    ; --- Kolom 2: print nama nada TARGET ---
-    ; (cursor otomatis di kolom 2 setelah print "T:")
-    ; [FIX BUG #2] GET_TARGET_NAME tidak pernah didefinisikan di mana pun.
-    ; Fungsi yang setara adalah GET_TARGET_BOUNDS (mapping.S): mengembalikan
-    ; Z ke pointer nama nada target di Flash. R18-R21 (bounds) tidak dipakai di sini.
-    RCALL GET_TARGET_BOUNDS     ; Z = pointer nama target (R18-R21 bounds, diabaikan)
-    RCALL LCD_STRING            ; print "A2" / "E2" / dll
-
-    ; --- Kolom 4–6: print "   " (3 spasi separator) ---
-    ; Nama nada max 3 karakter (misal "F#2"), cursor di kolom 5
-    ; Kita set eksplisit ke kolom 4 untuk keamanan
+    ; --- Kolom 0: Target Name ---
     LDI  R16, 0
-    LDI  R17, 4
+    LDI  R17, 0
     RCALL LCD_GOTOXY
+    RCALL GET_TARGET_BOUNDS     ; Z = pointer nama target (pasti 2 chars, mis. "E2")
+    RCALL LCD_STRING
 
-    LDI  ZH, hi8(_str_spaces)
-    LDI  ZL, lo8(_str_spaces)
-    RCALL LCD_STRING            ; print "   "
-
-    ; --- Kolom 7: print "A:" ---
+    ; --- Kolom 2: Spasi khusus ---
+    ; Nama target selalu 2 char, jadi kolom 2 selalu dikosongkan
     LDI  R16, 0
-    LDI  R17, 7
+    LDI  R17, 2
     RCALL LCD_GOTOXY
+    LDI  R16, ' '
+    RCALL LCD_CHAR
 
-    LDI  ZH, hi8(_str_a_colon)
-    LDI  ZL, lo8(_str_a_colon)
-    RCALL LCD_STRING            ; print "A:"
+    ; --- Kolom 3: Target Hz ---
+    LDI  R16, 0
+    LDI  R17, 3
+    RCALL LCD_GOTOXY
+    
+    ; Ambil Target Hz dari array TARGET_EXACT_HZ berdasarkan index str R23
+    LDI  ZH, hi8(TARGET_EXACT_HZ)
+    LDI  ZL, lo8(TARGET_EXACT_HZ)
+    ; offset = R23 * 2
+    MOV  R16, R23
+    LSL  R16
+    ADD  ZL, R16
+    CLR  R16
+    ADC  ZH, R16
+    LPM  R20, Z+                 ; Target Hz Low Byte
+    LPM  R21, Z                  ; Target Hz High Byte
+    
+    ; Ganti R25:R24 secara sementara untuk memanggil PRINT_HZ
+    MOV  R16, R24
+    MOV  R17, R25
+    MOV  R24, R20
+    MOV  R25, R21
+    RCALL PRINT_HZ
+    
+    ; Kembalikan R25:R24 aktual (Current Hz) untuk diproses di bawah
+    MOV  R24, R16
+    MOV  R25, R17
 
-    ; --- Kolom 9: print Hz aktual 3 digit ---
+    ; --- Kolom 6: "Hz " ---
+    LDI  R16, 0
+    LDI  R17, 6
+    RCALL LCD_GOTOXY
+    LDI  ZH, hi8(_str_hz_space)
+    LDI  ZL, lo8(_str_hz_space)
+    RCALL LCD_STRING
+
+    ; --- Kolom 9: Status Message ---
     LDI  R16, 0
     LDI  R17, 9
     RCALL LCD_GOTOXY
-    RCALL PRINT_HZ              ; print "082" / "110" / "330"
+    RCALL GET_STATUS            ; Z = pointer ke status (sudah dipadding 7 char)
+    RCALL LCD_STRING
 
-    ; --- Kolom 12: print " Hz" ---
-    LDI  R16, 0
-    LDI  R17, 12
+    ; =========================================================
+    ; BARIS 1: "{CURRENT_NAME} {CURRENT_HZ}Hz       "
+    ; =========================================================
+
+    ; --- Antisipasi nama 2 char vs 3 char (mis. E2 vs E#2) ---
+    ; Clear kolom 2 dan 3 untuk mencegah residual ghost karakter "2" atau spasi
+    LDI  R16, 1
+    LDI  R17, 2
     RCALL LCD_GOTOXY
-
-    LDI  ZH, hi8(_str_hz)
-    LDI  ZL, lo8(_str_hz)
-    RCALL LCD_STRING            ; print " Hz"
-
-    ; --- Kolom 15: spasi akhir (bersihkan sisa karakter) ---
-    LDI  R16, 0
-    LDI  R17, 15
+    LDI  R16, ' '
+    RCALL LCD_CHAR
+    LDI  R16, 1
+    LDI  R17, 3
     RCALL LCD_GOTOXY
     LDI  R16, ' '
     RCALL LCD_CHAR
 
-    ; =========================================================
-    ; BARIS 1: Status message "TOO LOOSE " / "NICE      " / "TOO TIGHT "
-    ; =========================================================
-
-    ; Set cursor ke baris 1 kolom 0
+    ; --- Kolom 0: Current Note Name ---
     LDI  R16, 1
     LDI  R17, 0
     RCALL LCD_GOTOXY
+    
+    ; Cari Note berdasarkan Hz Aktual di R25:R24
+    RCALL FIND_NOTE             ; Z = pointer nama nada aktual, R26 = index
+    RCALL LCD_STRING
 
-    ; Dapatkan pointer status string
-    RCALL GET_STATUS            ; Z = pointer ke STR_TOO_LOOSE/NICE/TOO_TIGHT
-    RCALL LCD_STRING            ; print status (sudah dipadding 10 karakter)
-
-    ; Bersihkan sisa kolom 10–15 dengan spasi
-    ; (antisipasi kalau string sebelumnya lebih panjang)
+    ; --- Kolom 4: Current Hz ---
     LDI  R16, 1
-    LDI  R17, 10
+    LDI  R17, 4
     RCALL LCD_GOTOXY
-    LDI  R16, ' '
-    RCALL LCD_CHAR
-    LDI  R16, ' '
-    RCALL LCD_CHAR
-    LDI  R16, ' '
-    RCALL LCD_CHAR
-    LDI  R16, ' '
-    RCALL LCD_CHAR
-    LDI  R16, ' '
-    RCALL LCD_CHAR
-    LDI  R16, ' '
-    RCALL LCD_CHAR
+    RCALL PRINT_HZ              ; R25:R24 aktual (Current Hz)
 
+    ; --- Kolom 7: "Hz       " (juga sekalian bersihkan sisa layar) ---
+    LDI  R16, 1
+    LDI  R17, 7
+    RCALL LCD_GOTOXY
+    LDI  ZH, hi8(_str_hz_clear)
+    LDI  ZL, lo8(_str_hz_clear)
+    RCALL LCD_STRING
+
+    POP  R21
+    POP  R20
     POP  ZL
     POP  ZH
     POP  R25
@@ -225,12 +233,10 @@ DISPLAY_STARTUP:
     LDI  ZL, lo8(_str_startup2)
     RCALL LCD_STRING
 
-    ; [FIX BUG #7] Delay ~2 detik @ 16MHz
-    ; LCD_DELAY_LONG ≈ 12.2ms (255×255×3 siklus / 16MHz)
-    ; 164 × 12.2ms ≈ 2000ms = 2 detik
-    ; (sebelumnya hanya 5× ≈ 61ms — terlalu cepat untuk terbaca)
-    ; R16 sudah di-PUSH di awal fungsi, aman dipakai sebagai counter
-    LDI  R16, 164
+    ; [FIX PROTEUS] Kurangi delay startup dari 164 (~2 detik) menjadi 10 (~120ms).
+    ; Proteus seringkali berjalan jauh lebih lambat dari waktu nyata (Real Time),
+    ; sehingga delay 2 detik bisa terasa seperti macet selamanya.
+    LDI  R16, 82
 _startup_wait:
     RCALL LCD_DELAY_LONG
     DEC  R16

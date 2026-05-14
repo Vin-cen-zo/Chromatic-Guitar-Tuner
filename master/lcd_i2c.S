@@ -18,6 +18,11 @@
 TWI_INIT:
     PUSH R16
 
+    ; --- FIX: Enable Internal Pull-up SDA & SCL ---
+    ; Mencegah I2C bus floating yang membuat TWI_WAIT hang di Proteus
+    SBI PORTC, 4
+    SBI PORTC, 5
+
     ; Set TWBR - menentukan kecepatan clock I2C
     LDI R16, TWBR_VAL
     STS TWBR, R16

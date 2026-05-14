@@ -1,24 +1,24 @@
 #define __SFR_OFFSET 0x00
 #include <avr/io.h>
 
-;.global BUZZER_INIT
-;.global BUZZER_TOGGLE
-;.global BUZZER_UPDATE_FREQ
+.global BUZZER_INIT
+.global BUZZER_TOGGLE
+.global BUZZER_UPDATE_FREQ
 
-.section .data
-buzzer_state: .byte 0   ; 0 = off, 1 = on
+; Alokasi variabel SRAM secara absolut
+.equ buzzer_state, 0x0104   ; 0 = off, 1 = on
 
 .section .text
 
 ; OCR1A Lookup Table (from infoFinpro.md):
 ; E2 (0) = 0x2F65
-; A2 (1) = 0x2381
-; D3 (2) = 0x1A9B
+; A2 (1) = 0x2382
+; D3 (2) = 0x1A9A
 ; G3 (3) = 0x13ED
 ; B3 (4) = 0x0FD1
 ; E4 (5) = 0x0BD9
 buzzer_lookup:
-    .word 0x2F65, 0x2381, 0x1A9B, 0x13ED, 0x0FD1, 0x0BD9
+    .word 0x2F65, 0x2382, 0x1A9A, 0x13ED, 0x0FD1, 0x0BD9
 
 BUZZER_INIT:
     ; PB1 (OC1A) as Output
@@ -67,25 +67,16 @@ skip_freq_update:
     ret
 
 BUZZER_TOGGLE:
-    lds r16, buzzer_state
-    cpi r16, 0
-    breq turn_on
+    sbic PIND, 3          ; Jika PD3 dilepas/HIGH, lompati perintah rjmp turn_on
+    rjmp turn_off         ; Melompat ke turn_off jika tombol dilepas
+    ; Jika sampai di sini berarti PD3 = LOW (ditekan)
     
-    ; turn off
-    ldi r16, 0
-    sts buzzer_state, r16
-    
-    ; Stop Toggle on Compare Match
-    ldi r16, 0x00
-    sts TCCR1A, r16
-    ; Stop timer
-    ldi r16, 0x00
-    sts TCCR1B, r16
-    
-    cbi PORTB, 1
-    ret
-
 turn_on:
+    ; Cegah mengulang nyala bila sudah nyala
+    lds r16, buzzer_state
+    cpi r16, 1
+    breq _bt_end
+
     ldi r16, 1
     sts buzzer_state, r16
     
@@ -100,4 +91,24 @@ turn_on:
     ldi r16, (1<<WGM12) | (1<<CS11)
     sts TCCR1B, r16
     
+_bt_end:
+    ret
+
+turn_off:
+    ; Cegah mengulang mati bila sudah mati
+    lds r16, buzzer_state
+    cpi r16, 0
+    breq _bt_end
+
+    ldi r16, 0
+    sts buzzer_state, r16
+    
+    ; Stop Toggle on Compare Match
+    ldi r16, 0x00
+    sts TCCR1A, r16
+    ; Stop timer
+    ldi r16, 0x00
+    sts TCCR1B, r16
+    
+    cbi PORTB, 1
     ret

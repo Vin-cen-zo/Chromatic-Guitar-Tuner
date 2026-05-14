@@ -1,58 +1,21 @@
-; === FILE PERAN 2 — JANGAN UBAH URUTAN ===
-; (Uncomment baris di bawah ini ketika file Peran 2 sudah siap untuk digabungkan)
-; #include "lcd_i2c.S"        ; 1. TWI primitives dulu
-; #include "lcd_driver.S"     ; 2. LCD driver (butuh TWI)
-; #include "lookup_table.S"   ; 3. Data tabel di Flash
-; #include "bcd_ascii.S"      ; 4. Konverter angka
-; #include "mapping.S"        ; 5. Logika mapping (butuh tabel)
-; #include "display.S"        ; 6. Update display (butuh semua di atas)
-; === END FILE PERAN 2 ===
-
-; [FIX BUG #1] Double include dihapus dari sini — usart_rx.S & buzzer_core.S
-; sudah di-include di .section .text di bawah. Duplikat ini menyebabkan assembler error.
+#define __SFR_OFFSET 0x00
+#include <avr/io.h>
 
 .global main
-
-; Interrupt Vectors
-.section .vectors
-    jmp main
-    jmp EXT_INT0        ; INT0 Request (PD2) - Mode/Senar
-    jmp EXT_INT1        ; INT1 Request (PD3) - Buzzer Toggle
-    jmp UNHANDLED_INT
-    jmp UNHANDLED_INT
-    jmp UNHANDLED_INT
-    jmp UNHANDLED_INT
-    jmp UNHANDLED_INT
-    jmp UNHANDLED_INT
-    jmp UNHANDLED_INT
-    jmp UNHANDLED_INT
-    jmp UNHANDLED_INT
-    jmp UNHANDLED_INT
-    jmp UNHANDLED_INT
-    jmp UNHANDLED_INT
-    jmp UNHANDLED_INT
-    jmp UNHANDLED_INT
-    jmp UNHANDLED_INT
-    jmp USART_RX_ISR    ; USART Rx Complete
-    ; fill the rest to avoid crash if accidentally triggered...
-
-UNHANDLED_INT:
-    reti
+.global INT0_vect
+.global INT1_vect
 
 .section .text
 
-; --- FILE PERAN 2 ---
-; [FIX BUG #4] Semua include Peran 2 di-uncomment — file sudah lengkap dan siap digabung
-; Urutan WAJIB dipertahankan (setiap file bergantung pada file sebelumnya)
-#include "lcd_i2c.S"        // 1. TWI primitives
+; === FILE PERAN 2 — JANGAN UBAH URUTAN ===
+; (Uncomment baris di bawah ini ketika file Peran 2 sudah siap untuk digabungkan)
+#include "lcd_i2c.S"        // 1. TWI primitives dulu
 #include "lcd_driver.S"     // 2. LCD driver (butuh TWI)
 #include "lookup_table.S"   // 3. Data tabel di Flash
 #include "bcd_ascii.S"      // 4. Konverter angka
 #include "mapping.S"        // 5. Logika mapping (butuh tabel)
 #include "display.S"        // 6. Update display (butuh semua di atas)
-
-#include "usart_rx.S"
-#include "buzzer_core.S"
+; === END FILE PERAN 2 ===`n#include "usart_rx.S"`n#include "buzzer_core.S" 
 
 main:
     ; Init Stack Pointer
@@ -68,6 +31,11 @@ main:
     clr r24           ; R24 = Low Byte Hz
     clr r25           ; R25 = High Byte Hz
 
+    ; [FIX UI] Inisialisasi layang pertama, angkat flag R22 agar setelah reset 
+    ; LCD langsung masuk ke tampilan Tuner Utama (menampilkan 0 Hz),
+    ; bukan stuck diam selamanya di string "Initializing.." !
+    ;ldi r22, 0x01
+
     ; Set INT0 (PD2) and INT1 (PD3) as Input with Pull-up
     cbi DDRD, 2
     sbi PORTD, 2
@@ -75,8 +43,9 @@ main:
     sbi PORTD, 3
 
     ; Configure External Interrupts INT0 & INT1
-    ; Trigger on Falling Edge
-    ldi r16, (1<<ISC11) | (0<<ISC10) | (1<<ISC01) | (0<<ISC00)
+    ; INT0: Trigger on Falling Edge     (ISC01=1, ISC00=0)
+    ; INT1: Trigger on Any Logic Change (ISC11=0, ISC10=1) -> Untuk HOLD buzzer
+    ldi r16, (0<<ISC11) | (1<<ISC10) | (1<<ISC01) | (0<<ISC00)
     sts EICRA, r16
     ; Enable INT0 and INT1
     ldi r16, (1<<INT1) | (1<<INT0)
@@ -114,7 +83,7 @@ MAIN_LOOP:
 
 
 ; --- ISR for INT0 (Mode / String Index) ---
-EXT_INT0:
+INT0_vect:
     push r16
     in r16, SREG
     push r16
@@ -151,7 +120,7 @@ end_int0:
 
 
 ; --- ISR for INT1 (Buzzer Toggle) ---
-EXT_INT1:
+INT1_vect:
     push r16
     in r16, SREG
     push r16
@@ -171,3 +140,6 @@ EXT_INT1:
     out SREG, r16
     pop r16
     reti
+
+#include "usart_rx.S"
+#include "buzzer_core.S"
