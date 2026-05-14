@@ -100,7 +100,13 @@ MAIN_LOOP:
     
     ; Jika data baru ada, reset flag
     clr r22
-    
+
+    ; [FIX RACE CONDITION] Load Hz terbaru dari SRAM ke R24/R25 tepat sebelum render.
+    ; ISR tidak lagi menulis langsung ke R24/R25 — data disimpan di rx_final_lo/hi.
+    ; Ini mencegah nilai baru dari ISR ter-overwrite oleh POP di dalam UPDATE_DISPLAY.
+    lds r24, rx_final_lo
+    lds r25, rx_final_hi
+
     ; [FIX BUG #4] UPDATE_DISPLAY di-uncomment — dipanggil tiap data baru siap
     RCALL UPDATE_DISPLAY
 

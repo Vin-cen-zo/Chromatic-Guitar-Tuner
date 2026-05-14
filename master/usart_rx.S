@@ -7,6 +7,12 @@
 .section .data
 rx_state:   .byte 0     ; 0=wait sync, 1=wait low, 2=wait high
 rx_temp_lo: .byte 0
+; [FIX RACE CONDITION] Tambah dua variabel SRAM untuk menyimpan Hz final.
+; Sebelumnya ISR langsung tulis ke R24/R25, tapi UPDATE_DISPLAY melakukan PUSH/POP
+; pada R24/R25 sehingga nilai baru dari ISR bisa ter-overwrite oleh POP.
+; Solusi: ISR simpan ke SRAM, main loop load dari SRAM ke R24/R25 sebelum render.
+rx_final_lo: .byte 0    ; Low Byte Hz terakhir yang valid
+rx_final_hi: .byte 0    ; High Byte Hz terakhir yang valid
 
 .section .text
 
@@ -28,6 +34,9 @@ USART_INIT:
     ; init variables
     ldi r16, 0
     sts rx_state, r16
+    ; [FIX RACE CONDITION] Inisialisasi variabel SRAM baru ke 0
+    sts rx_final_lo, r16
+    sts rx_final_hi, r16
     ret
 
 USART_RX_ISR:
@@ -62,9 +71,12 @@ state_1:
 
 state_2:
     ; R16 contains High Byte
-    mov r25, r16        ; Update R25 (High Byte)
-    lds r24, rx_temp_lo ; Update R24 (Low Byte)
-    
+    ; [FIX RACE CONDITION] Simpan ke SRAM, BUKAN langsung ke R24/R25.
+    ; R17 aman dipakai di sini karena sudah di-PUSH di awal ISR (baris push r17).
+    sts rx_final_hi, r16    ; simpan High Byte ke SRAM
+    lds r17, rx_temp_lo     ; ambil Low Byte dari temp
+    sts rx_final_lo, r17    ; simpan Low Byte ke SRAM
+
     ; Set flag that new data is ready
     ldi r22, 0x01
     
