@@ -1,8 +1,9 @@
+#define __SFR_OFFSET 0x00
 #include <avr/io.h>
 
-.global BUZZER_INIT
-.global BUZZER_TOGGLE
-.global BUZZER_UPDATE_FREQ
+;.global BUZZER_INIT
+;.global BUZZER_TOGGLE
+;.global BUZZER_UPDATE_FREQ
 
 .section .data
 buzzer_state: .byte 0   ; 0 = off, 1 = on
