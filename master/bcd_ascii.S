@@ -28,9 +28,12 @@
 ;   R25:R24 = nilai Hz input (tidak dimodifikasi — di-PUSH/POP)
 ;   R20     = digit ratusan
 ;   R21     = digit puluhan
-;   R22     = digit satuan
+;   R24     = digit satuan (sisa langsung dari DIV16_10, tidak perlu register terpisah)
 ;   R16     = temp untuk LCD_CHAR
 ;   R18     = temp pembagian
+; [FIX BUG #6] R22 dihapus dari PRINT_HZ — mencegah race condition dengan ISR USART:
+;   ISR bisa set R22=0x01 (flag data baru) saat PRINT_HZ sedang berjalan.
+;   Jika R22 di-PUSH di awal dan POP di akhir PRINT_HZ, nilai flag dari ISR akan hilang.
 ; =============================================================================
 
 #define __SFR_OFFSET 0x00
@@ -142,7 +145,7 @@ PRINT_HZ:
     PUSH R19
     PUSH R20
     PUSH R21
-    PUSH R22
+    ; [FIX BUG #6] PUSH R22 dihapus — R22 tidak lagi dipakai di dalam fungsi ini
     PUSH R24
     PUSH R25
 
@@ -153,7 +156,8 @@ PRINT_HZ:
     RCALL DIV16_10          ; R21 = puluhan, R25:R24 = sisa
 
     ; --- Tahap 3: Digit satuan = sisa ---
-    MOV  R22, R24           ; R22 = satuan (R25 pasti 0 di sini)
+    ; [FIX BUG #6] R24 sudah berisi digit satuan (sisa dari DIV16_10, R25 pasti 0).
+    ; Tidak perlu MOV ke R22 — langsung dipakai dari R24 di Tahap 4.
 
     ; --- Tahap 4: Konversi ke ASCII dan print ---
     ; Digit ratusan
@@ -167,13 +171,14 @@ PRINT_HZ:
     RCALL LCD_CHAR
 
     ; Digit satuan
-    MOV  R16, R22
+    ; [FIX BUG #6] Ambil langsung dari R24 (sisa DIV16_10), bukan R22
+    MOV  R16, R24
     ORI  R16, 0x30
     RCALL LCD_CHAR
 
     POP  R25
     POP  R24
-    POP  R22
+    ; [FIX BUG #6] POP R22 dihapus — simetris dengan PUSH R22 yang juga sudah dihapus
     POP  R21
     POP  R20
     POP  R19

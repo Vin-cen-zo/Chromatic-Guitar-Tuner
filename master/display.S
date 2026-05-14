@@ -95,7 +95,10 @@ UPDATE_DISPLAY:
 
     ; --- Kolom 2: print nama nada TARGET ---
     ; (cursor otomatis di kolom 2 setelah print "T:")
-    RCALL GET_TARGET_NAME       ; Z = pointer nama target
+    ; [FIX BUG #2] GET_TARGET_NAME tidak pernah didefinisikan di mana pun.
+    ; Fungsi yang setara adalah GET_TARGET_BOUNDS (mapping.S): mengembalikan
+    ; Z ke pointer nama nada target di Flash. R18-R21 (bounds) tidak dipakai di sini.
+    RCALL GET_TARGET_BOUNDS     ; Z = pointer nama target (R18-R21 bounds, diabaikan)
     RCALL LCD_STRING            ; print "A2" / "E2" / dll
 
     ; --- Kolom 4–6: print "   " (3 spasi separator) ---
@@ -222,12 +225,16 @@ DISPLAY_STARTUP:
     LDI  ZL, lo8(_str_startup2)
     RCALL LCD_STRING
 
-    ; Tahan 2 detik supaya terbaca
+    ; [FIX BUG #7] Delay ~2 detik @ 16MHz
+    ; LCD_DELAY_LONG ≈ 12.2ms (255×255×3 siklus / 16MHz)
+    ; 164 × 12.2ms ≈ 2000ms = 2 detik
+    ; (sebelumnya hanya 5× ≈ 61ms — terlalu cepat untuk terbaca)
+    ; R16 sudah di-PUSH di awal fungsi, aman dipakai sebagai counter
+    LDI  R16, 164
+_startup_wait:
     RCALL LCD_DELAY_LONG
-    RCALL LCD_DELAY_LONG
-    RCALL LCD_DELAY_LONG
-    RCALL LCD_DELAY_LONG
-    RCALL LCD_DELAY_LONG
+    DEC  R16
+    BRNE _startup_wait
 
     POP  ZL
     POP  ZH

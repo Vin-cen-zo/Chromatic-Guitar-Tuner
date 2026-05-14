@@ -8,8 +8,8 @@
 ; #include "display.S"        ; 6. Update display (butuh semua di atas)
 ; === END FILE PERAN 2 ===
 
-#include "usart_rx.S"
-#include "buzzer_core.S"
+; [FIX BUG #1] Double include dihapus dari sini — usart_rx.S & buzzer_core.S
+; sudah di-include di .section .text di bawah. Duplikat ini menyebabkan assembler error.
 
 .global main
 
@@ -41,18 +41,15 @@ UNHANDLED_INT:
 
 .section .text
 
-; --- FILE PERAN 2 --- 
-; File dummy atau file rekan 2. Karena rekan 2 belum selesai,
-; kita include file-nya. Jika belum ada, proses build akan error 
-; tetapi secara kode assembly struktur `#include` ini sudah benar sesuai dokumen.
-; Untuk compile, bisa uncomment ini jika file rekan 2 sudah siap.
-;
-; #include "lcd_i2c.S"
-; #include "lcd_driver.S"
-; #include "lookup_table.S"
-; #include "bcd_ascii.S"
-; #include "mapping.S"
-; #include "display.S"
+; --- FILE PERAN 2 ---
+; [FIX BUG #4] Semua include Peran 2 di-uncomment — file sudah lengkap dan siap digabung
+; Urutan WAJIB dipertahankan (setiap file bergantung pada file sebelumnya)
+#include "lcd_i2c.S"        ; 1. TWI primitives
+#include "lcd_driver.S"     ; 2. LCD driver (butuh TWI)
+#include "lookup_table.S"   ; 3. Data tabel di Flash
+#include "bcd_ascii.S"      ; 4. Konverter angka
+#include "mapping.S"        ; 5. Logika mapping (butuh tabel)
+#include "display.S"        ; 6. Update display (butuh semua di atas)
 
 #include "usart_rx.S"
 #include "buzzer_core.S"
@@ -89,8 +86,9 @@ RESET:
     rcall USART_INIT
     rcall BUZZER_INIT
     
-    ; Panggil LCD_INIT milik Peran 2
-    ; RCALL LCD_INIT
+    ; [FIX BUG #4] LCD_INIT di-uncomment — wajib dipanggil sekali di RESET
+    RCALL LCD_INIT
+    RCALL DISPLAY_STARTUP   ; tampilkan splash screen (opsional)
 
     ; Enable Global Interrupts
     sei
@@ -103,8 +101,8 @@ MAIN_LOOP:
     ; Jika data baru ada, reset flag
     clr r22
     
-    ; Panggil layar update
-    ; RCALL UPDATE_DISPLAY
+    ; [FIX BUG #4] UPDATE_DISPLAY di-uncomment — dipanggil tiap data baru siap
+    RCALL UPDATE_DISPLAY
 
     rjmp MAIN_LOOP
 
@@ -114,6 +112,12 @@ EXT_INT0:
     push r16
     in r16, SREG
     push r16
+    ; [FIX BUG #3] Simpan R17, ZH, ZL sebelum panggil BUZZER_UPDATE_FREQ
+    ; BUZZER_UPDATE_FREQ memodifikasi ketiga register ini tanpa push/pop sendiri,
+    ; sehingga akan merusak nilai milik kode yang sedang diinterupsi (mis. UPDATE_DISPLAY)
+    push r17
+    push zh
+    push zl
 
     ; Increment R23 Mode (0-5)
     inc r23
@@ -123,13 +127,17 @@ EXT_INT0:
 reset_mode:
     clr r23
 end_int0:
-    
+
     ; Secara opsional set R22=1 agar layar di-update pas ganti senar, walau blm ada input Hz baru
     ldi r22, 0x01
 
     ; Update frekuensi buzzer jika sedang nyala
     rcall BUZZER_UPDATE_FREQ
 
+    ; [FIX BUG #3] Pulihkan ZL, ZH, R17 dalam urutan LIFO
+    pop zl
+    pop zh
+    pop r17
     pop r16
     out SREG, r16
     pop r16
@@ -141,9 +149,18 @@ EXT_INT1:
     push r16
     in r16, SREG
     push r16
+    ; [FIX BUG #3] Simpan R17, ZH, ZL — BUZZER_TOGGLE memanggil BUZZER_UPDATE_FREQ
+    ; yang memodifikasi R17, ZH, ZL tanpa menyelamatkannya sendiri
+    push r17
+    push zh
+    push zl
 
     rcall BUZZER_TOGGLE
 
+    ; [FIX BUG #3] Pulihkan ZL, ZH, R17 dalam urutan LIFO
+    pop zl
+    pop zh
+    pop r17
     pop r16
     out SREG, r16
     pop r16
