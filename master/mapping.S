@@ -204,9 +204,26 @@ GET_STATUS:
     PUSH R20
     PUSH R21
 
-    ; Ambil batas target → R18:R19 (bawah), R20:R21 (atas)
-    RCALL GET_TARGET_BOUNDS
-    ; (Z sekarang menunjuk ke nama nada target — akan ditimpa di bawah)
+    ; Ambil exact Target Hz dari TARGET_EXACT_HZ berdasarkan R23
+    LDI  ZH, hi8(TARGET_EXACT_HZ)
+    LDI  ZL, lo8(TARGET_EXACT_HZ)
+    MOV  R16, R23
+    LSL  R16
+    ADD  ZL, R16
+    CLR  R17
+    ADC  ZH, R17
+    LPM  R18, Z+             ; R18 = exact Hz low
+    LPM  R19, Z              ; R19 = exact Hz high
+
+    ; --- Batas bawah = exact Hz - 2 ---
+    MOV  R20, R18
+    MOV  R21, R19
+    SUBI R18, 2
+    SBCI R19, 0              ; R18:R19 = batas bawah
+
+    ; --- Batas atas = exact Hz + 2 ---
+    SUBI R20, -2
+    SBCI R21, -1             ; R20:R21 = batas atas
 
     ; --- Cek TOO LOOSE: Hz aktual < batas_bawah? ---
     ; Hitung R25:R24 - R19:R18, cek carry

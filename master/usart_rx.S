@@ -1,18 +1,17 @@
 #define __SFR_OFFSET 0x00
 #include <avr/io.h>
 
-;.global USART_INIT
-;.global USART_RX_ISR
+.global USART_INIT
+.global USART_RX_vect
 
-.section .data
-rx_state:   .byte 0     ; 0=wait sync, 1=wait low, 2=wait high
-rx_temp_lo: .byte 0
-; [FIX RACE CONDITION] Tambah dua variabel SRAM untuk menyimpan Hz final.
-; Sebelumnya ISR langsung tulis ke R24/R25, tapi UPDATE_DISPLAY melakukan PUSH/POP
-; pada R24/R25 sehingga nilai baru dari ISR bisa ter-overwrite oleh POP.
-; Solusi: ISR simpan ke SRAM, main loop load dari SRAM ke R24/R25 sebelum render.
-rx_final_lo: .byte 0    ; Low Byte Hz terakhir yang valid
-rx_final_hi: .byte 0    ; High Byte Hz terakhir yang valid
+; --- FIX MEMORY ALLOCATION ---
+; Hapus .section .data dan ganti dengan absolute address (.equ) di SRAM (0x0100+).
+; Ini sangat kritikal di raw assembly agar variabel SRAM tidak tumpang tindih
+; dengan Register CPU (R0-R31) saat linker menempatkan .data di alamat 0x0000.
+.equ rx_state,      0x0100    ; 0=wait sync, 1=wait low, 2=wait high
+.equ rx_temp_lo,    0x0101
+.equ rx_final_lo,   0x0102    ; Low Byte Hz terakhir yang valid
+.equ rx_final_hi,   0x0103    ; High Byte Hz terakhir yang valid
 
 .section .text
 
@@ -39,7 +38,7 @@ USART_INIT:
     sts rx_final_hi, r16
     ret
 
-USART_RX_ISR:
+USART_RX_vect:
     push r16
     in r16, SREG
     push r16
