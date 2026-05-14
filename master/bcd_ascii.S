@@ -68,8 +68,8 @@ DIV16_100:
 _div100_loop:
     ; Cek apakah R25:R24 >= 100
     ; Caranya: kurangi 100, kalau hasilnya negatif (carry) → berhenti
-    LDI  R18, LOW(100)
-    LDI  R19, HIGH(100)     ; R19:R18 = 100
+    LDI  R18, lo8(100)
+    LDI  R19, hi8(100)     ; R19:R18 = 100
 
     ; Coba kurangi: R25:R24 - 100
     SUB  R24, R18
@@ -106,8 +106,8 @@ DIV16_10:
     CLR  R21                ; hasil bagi = 0
 
 _div10_loop:
-    LDI  R18, LOW(10)
-    LDI  R19, HIGH(10)      ; R19:R18 = 10
+    LDI  R18, lo8(10)
+    LDI  R19, hi8(10)      ; R19:R18 = 10
 
     SUB  R24, R18
     SBC  R25, R19

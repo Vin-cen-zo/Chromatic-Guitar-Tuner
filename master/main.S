@@ -15,7 +15,7 @@
 
 ; Interrupt Vectors
 .section .vectors
-    jmp RESET
+    jmp main
     jmp EXT_INT0        ; INT0 Request (PD2) - Mode/Senar
     jmp EXT_INT1        ; INT1 Request (PD3) - Buzzer Toggle
     jmp UNHANDLED_INT
@@ -44,17 +44,17 @@ UNHANDLED_INT:
 ; --- FILE PERAN 2 ---
 ; [FIX BUG #4] Semua include Peran 2 di-uncomment — file sudah lengkap dan siap digabung
 ; Urutan WAJIB dipertahankan (setiap file bergantung pada file sebelumnya)
-#include "lcd_i2c.S"        ; 1. TWI primitives
-#include "lcd_driver.S"     ; 2. LCD driver (butuh TWI)
-#include "lookup_table.S"   ; 3. Data tabel di Flash
-#include "bcd_ascii.S"      ; 4. Konverter angka
-#include "mapping.S"        ; 5. Logika mapping (butuh tabel)
-#include "display.S"        ; 6. Update display (butuh semua di atas)
+#include "lcd_i2c.S"        // 1. TWI primitives
+#include "lcd_driver.S"     // 2. LCD driver (butuh TWI)
+#include "lookup_table.S"   // 3. Data tabel di Flash
+#include "bcd_ascii.S"      // 4. Konverter angka
+#include "mapping.S"        // 5. Logika mapping (butuh tabel)
+#include "display.S"        // 6. Update display (butuh semua di atas)
 
 #include "usart_rx.S"
 #include "buzzer_core.S"
 
-RESET:
+main:
     ; Init Stack Pointer
     ldi r16, hi8(RAMEND)
     out SPH, r16

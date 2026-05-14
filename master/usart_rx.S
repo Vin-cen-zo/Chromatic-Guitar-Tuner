@@ -1,7 +1,8 @@
+#define __SFR_OFFSET 0x00
 #include <avr/io.h>
 
-.global USART_INIT
-.global USART_RX_ISR
+;.global USART_INIT
+;.global USART_RX_ISR
 
 .section .data
 rx_state:   .byte 0     ; 0=wait sync, 1=wait low, 2=wait high
