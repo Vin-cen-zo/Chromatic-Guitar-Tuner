@@ -72,25 +72,39 @@ dummy_wait:
 
 main_loop:
 
+    ; --- Reset Timeout Counter ---
+    clr r26
+    clr r27
+
     ; Reset Timer 1 counter
     ldi r16, 0x00
     sts TCCR1B, r16         ; Stop timer
     sts TCNT1H, r16         ; Reset counter
     sts TCNT1L, r16
 
-    ; --- Fase 1: Tunggu sinyal turun di bawah 320 (0x0140) ---
+    ; --- Fase 1: Tunggu sinyal turun di bawah 511 (0x01FF) ---
 fase_1_turun:
     BACA_ADC
-    cpi r16, 0x40
+    adiw r26, 1             ; Tambah counter timeout
+    cpi r27, 0x08           ; Jika timeout tercapai
+    brlo skip_to1
+    rjmp send_zero          ; Paksa kirim 0 Hz
+skip_to1:
+    cpi r16, 0xFF
     ldi r18, 0x01
     cpc r17, r18
     brsh fase_1_turun
 
-    ; --- Fase 2: Tunggu sinyal naik di atas 355 (0x0163) -> START ---
+    ; --- Fase 2: Tunggu sinyal naik di atas 513 (0x0201) -> START ---
 fase_2_naik:
     BACA_ADC
-    cpi r16, 0x63
-    ldi r18, 0x01
+    adiw r26, 1
+    cpi r27, 0x08
+    brlo skip_to2
+    rjmp send_zero
+skip_to2:
+    cpi r16, 0x01
+    ldi r18, 0x02
     cpc r17, r18
     brlo fase_2_naik
 
@@ -98,19 +112,29 @@ fase_2_naik:
     ldi r16, (1<<CS11)
     sts TCCR1B, r16
 
-    ; --- Fase 3: Tunggu sinyal turun lagi di bawah 320 ---
+    ; --- Fase 3: Tunggu sinyal turun lagi di bawah 511 (0x01FF) ---
 fase_3_turun:
     BACA_ADC
-    cpi r16, 0x40
+    adiw r26, 1
+    cpi r27, 0x08
+    brlo skip_to3
+    rjmp send_zero
+skip_to3:
+    cpi r16, 0xFF
     ldi r18, 0x01
     cpc r17, r18
     brsh fase_3_turun
 
-    ; --- Fase 4: Tunggu sinyal naik lagi di atas 355 -> STOP ---
+    ; --- Fase 4: Tunggu sinyal naik lagi di atas 513 (0x0201) -> STOP ---
 fase_4_naik:
     BACA_ADC
-    cpi r16, 0x63
-    ldi r18, 0x01
+    adiw r26, 1
+    cpi r27, 0x08
+    brlo skip_to4
+    rjmp send_zero
+skip_to4:
+    cpi r16, 0x01
+    ldi r18, 0x02
     cpc r17, r18
     brlo fase_4_naik
 
@@ -127,6 +151,12 @@ fase_4_naik:
     or  r16, r21
     brne div_start
     rjmp main_loop
+
+; --- Handler Timeout ---
+send_zero:
+    clr r24                 ; Set frekuensi 0
+    clr r25
+    rjmp transmisi_mulai    ; Langsung kirim ke Master
 
 div_start:
 
