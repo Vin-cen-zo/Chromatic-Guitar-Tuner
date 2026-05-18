@@ -78,19 +78,19 @@ main_loop:
     sts TCNT1H, r16         ; Reset counter
     sts TCNT1L, r16
 
-    ; --- Fase 1: Tunggu sinyal turun di bawah 500 (0x01F4) ---
+    ; --- Fase 1: Tunggu sinyal turun di bawah 320 (0x0140) ---
 fase_1_turun:
     BACA_ADC
-    cpi r16, 0xF4
+    cpi r16, 0x40
     ldi r18, 0x01
     cpc r17, r18
     brsh fase_1_turun
 
-    ; --- Fase 2: Tunggu sinyal naik di atas 520 (0x0208) -> START ---
+    ; --- Fase 2: Tunggu sinyal naik di atas 355 (0x0163) -> START ---
 fase_2_naik:
     BACA_ADC
-    cpi r16, 0x08
-    ldi r18, 0x02
+    cpi r16, 0x63
+    ldi r18, 0x01
     cpc r17, r18
     brlo fase_2_naik
 
@@ -98,19 +98,19 @@ fase_2_naik:
     ldi r16, (1<<CS11)
     sts TCCR1B, r16
 
-    ; --- Fase 3: Tunggu sinyal turun lagi di bawah 500 ---
+    ; --- Fase 3: Tunggu sinyal turun lagi di bawah 320 ---
 fase_3_turun:
     BACA_ADC
-    cpi r16, 0xF4
+    cpi r16, 0x40
     ldi r18, 0x01
     cpc r17, r18
     brsh fase_3_turun
 
-    ; --- Fase 4: Tunggu sinyal naik lagi di atas 520 -> STOP ---
+    ; --- Fase 4: Tunggu sinyal naik lagi di atas 355 -> STOP ---
 fase_4_naik:
     BACA_ADC
-    cpi r16, 0x08
-    ldi r18, 0x02
+    cpi r16, 0x63
+    ldi r18, 0x01
     cpc r17, r18
     brlo fase_4_naik
 
